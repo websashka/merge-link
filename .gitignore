@@ -1,0 +1,7 @@
+npm-debug.log
+.vscode
+.history
+.idea
+node_modules
+dist
+
