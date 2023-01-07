@@ -1,13 +1,20 @@
 {
   "name": "merge-link",
-  "version": "1.0.0",
-  "main": "index.js",
+  "version": "0.0.1",
+  "main": "./dist/index.js",
   "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
   "scripts": {
-    "build": "tsc"
+    "build": "rollup --config rollup.config.js",
+    "watch": "rollup --config rollup.config.js -w"
   },
   "devDependencies": {
     "@apollo/client": "^3.7.3",
+    "@rollup/plugin-typescript": "^11.0.0",
     "@types/lodash.get": "^4.4.7",
     "@types/lodash.set": "^4.3.7",
     "@types/lodash.uniq": "^4.5.7",
@@ -16,6 +23,7 @@
     "lodash.get": "^4.4.2",
     "lodash.set": "^4.3.2",
     "lodash.uniq": "^4.5.0",
+    "rollup": "^3.9.1",
     "traverse": "^0.6.7",
     "typescript": "^4.9.4"
   },

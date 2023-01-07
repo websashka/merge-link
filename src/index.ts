@@ -1,1 +1,1 @@
-export { MergeLink } from './MergeLink'
+export { MergeLink as default } from './MergeLink'

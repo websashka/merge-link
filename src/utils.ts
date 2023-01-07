@@ -1,23 +1,54 @@
-import {ApolloClient, ApolloLink, gql, HttpLink, InMemoryCache, toPromise, fromPromise , parser} from "@apollo/client";
+import {DocumentNode, gql, toPromise} from "@apollo/client";
 import { removeDirectivesFromDocument } from "@apollo/client/utilities";
 import {createOperation} from "@apollo/client/link/utils";
-import { visit } from "graphql";
+import {DirectiveNode, visit} from "graphql";
 import get from "lodash.get";
 import set from "lodash.set";
 import unique from "lodash.uniq";
 import traverse from "traverse";
 
-export const getDirectiveFromNode = (root, node, path) => {
+type Path = (string | number)[];
+
+type PrimaryKey = {
+  name: string;
+  path: Path;
+}
+
+type ForeignKey = {
+  path: Path;
+}
+
+
+type Request = {
+  name: string;
+  path: Path;
+  pk?: PrimaryKey;
+  fk?: ForeignKey;
+  table: string;
+  api: string;
+  selectionSet: any;
+  args: any;
+}
+
+type Directive = {
+  name: string;
+  value: any;
+  pathToNode: Path;
+  selectionSet: any;
+  args: any;
+}
+
+export const getDirectiveFromNode = (root: DocumentNode, node: DirectiveNode, path: readonly (string | number)[]): Directive => {
   const parentNode = get(root, path.slice(0, -2));
-  const args = node.arguments.reduce((acc, argument) => {
-    acc[argument.name.value] = argument.value.value;
+  const args = node.arguments?.reduce((acc, argument) => {
+    acc[argument.name.value] = (argument.value as any).value;
     return acc;
-  }, {});
+  }, {} as Record<string, any>);
 
   const doc = get(root, path.slice(0, 5));
-  const absolutePath = path.slice(5).reduce((acc, cur, index) => {
+  const absolutePath = path.slice(5).reduce((acc: string[], cur, index) => {
     const prev = acc[index - 1]
-    let str = prev || "";
+    let str: string = prev || "";
     if(prev) {
       str += "."
     }
@@ -43,10 +74,10 @@ export const getDirectiveFromNode = (root, node, path) => {
   }
 };
 
-export const getExternalRequests = (doc) => {
-  let requests = [];
+export const getExternalRequests = (doc: DocumentNode) => {
+  let requests: Request[] = [];
 
-  const createOrUpdateRequest = (name, valuesOrFunc) => {
+  const createOrUpdateRequest = (name: string, valuesOrFunc: any) => {
     const request = requests.find(request => request.name === name);
 
     if(typeof valuesOrFunc === "function" && !request) {
@@ -105,7 +136,7 @@ export const getExternalRequests = (doc) => {
             })
             break;
           case "pk":
-            createOrUpdateRequest(args.field, (request) => {
+            createOrUpdateRequest(args.field, (request: any) => {
               const pathToPrimaryKey = pathToNode.filter(item => !request.path.includes(item));
               return ({ pk: { name: value, path: pathToPrimaryKey } })
             })
@@ -122,7 +153,7 @@ export const getExternalRequests = (doc) => {
   return requests
 };
 
-export const getForeignKeys = (response, paths) => {
+export const getForeignKeys = (response: any, paths: Path) => {
   let node = response;
   paths.forEach(path => {
     if(Array.isArray(node)) {
@@ -134,9 +165,9 @@ export const getForeignKeys = (response, paths) => {
   return unique(node);
 }
 
-export function buildQuery({ name, table, api, selectionSet, pk, fk, path, args }, mainResponse) {
+export function buildQuery(this: any, { name, table, api, selectionSet, pk, fk, path, args }: Request, mainResponse: any) {
   let params = ''
-  if(args) {
+  if(args && fk) {
     params += '('
     const foreignKeys = getForeignKeys(mainResponse, fk.path);
     params += args.replace(/\$fk/, JSON.stringify(foreignKeys));
@@ -147,7 +178,7 @@ export function buildQuery({ name, table, api, selectionSet, pk, fk, path, args 
     ${table}${params}
     }`;
 
-  return toPromise(this[api].request(createOperation({}, {
+  return toPromise(this.links[api].request(createOperation({}, {
     query: removeDirectivesFromDocument([{ name: "pk"}], visit(documentNode, {
       enter(node) {
         if(node.kind === "Field" && node.name.value === table) {
@@ -157,16 +188,15 @@ export function buildQuery({ name, table, api, selectionSet, pk, fk, path, args 
           }
         }
       }
-    }))
-  }))).then((res => ({ path, pk, fk, data: res.data[table]})))
+    }))!
+  }))).then(((res: any) => ({ path, pk, fk, data: res.data[table]})));
 }
-export const merge = (mainResponse, responses) => {
+export const merge = (mainResponse: any, responses: any[]) => {
   const availablePaths = traverse(mainResponse.data).paths();
   responses.forEach((res) => {
-    availablePaths.filter(arr => res.fk.path.every((item => arr.includes(item)))).forEach(path => {
+    availablePaths.filter(arr => res.fk.path.every(((item: string) => arr.includes(item)))).forEach(path => {
       const fk = get(mainResponse.data, path);
-      const entities = traverse(res.data).paths().filter(arr => res.pk.path.every((item => arr.includes(item)))).map((path) => get(res.data, path))
-      console.log(entities)
+      const entities = traverse(res.data).paths().filter(arr => res.pk.path.every(((item: string) => arr.includes(item)))).map((path) => get(res.data, path))
       const entity = entities.find(item => item[res.pk.name] === fk);
       path[path.length - 1] = res.path[res.path.length - 1];
       set(mainResponse.data, path, entity);
